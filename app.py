@@ -30,7 +30,6 @@ exercises = {
     }
 }
 
-
 for name, val in exercises.items():
 
     st.subheader(name)
@@ -40,34 +39,24 @@ for name, val in exercises.items():
 
     mode = st.radio(
         f"Choose mode for {name}",
-        ["Live", "Upload Video"],
+        ["Camera (Quick)", "Upload Video"],
         key=f"{name}_mode"
     )
 
-    # ================= LIVE MODE =================
-    if mode == "Live":
+    # ================= CAMERA MODE =================
+    if mode == "Camera (Quick)":
 
-        actual_reps_live = st.number_input(
-            f"Enter Actual Reps for {name}",
-            min_value=1,
-            step=1,
-            key=f"{name}_live_actual"
-        )
+        picture = st.camera_input(f"Take a picture for {name}")
 
-        if st.button(f"▶️ Start {name} Live"):
+        if picture is not None:
+            st.image(picture)
 
-            st.info("Press 'q' in webcam window to quit.")
+            tfile = tempfile.NamedTemporaryFile(delete=False)
+            tfile.write(picture.getvalue())
 
-            # ✅ webcam source
-            ai_reps = val["func"](0, live=True)
+            ai_reps = val["func"](tfile.name, live=False)
 
-            # ✅ accuracy AFTER closing webcam
-            accuracy = (
-                1 - abs(actual_reps_live - ai_reps)
-                / actual_reps_live
-            ) * 100
-
-            st.success(f"✅ Live Accuracy: {accuracy:.2f}%")
+            st.success(f"Detected Reps (Single Frame): {ai_reps}")
 
     # ================= UPLOAD MODE =================
     else:
@@ -99,6 +88,7 @@ for name, val in exercises.items():
                     / actual_reps_upload
                 ) * 100
 
-                st.success(f"✅ Accuracy: {accuracy:.2f}%")
+                st.success(f"🏆 AI Reps: {ai_reps}")
+                st.success(f"🎯 Accuracy: {accuracy:.2f}%")
 
     st.markdown("---")
