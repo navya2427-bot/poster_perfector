@@ -1,92 +1,72 @@
 import streamlit as st
-import av
-import cv2
-import numpy as np
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
-import mediapipe as mp
+from exercises import bicep_curls, dips, situps, plank, squats
+import tempfile
 
 st.set_page_config(page_title="AI Fitness Trainer", layout="centered")
-st.title("🏋️ AI-Powered Fitness Trainer (Live Video)")
+st.title("🏋️ AI-Powered Fitness Trainer")
 
-mp_pose = mp.solutions.pose
-mp_drawing = mp.solutions.drawing_utils
+st.markdown("Upload a video to analyze your exercise form and count reps.")
 
+exercises = {
+    "Bicep Curls": {
+        "desc": "Track your bicep curl reps using elbow angle.",
+        "func": bicep_curls
+    },
+    "Dips": {
+        "desc": "Bodyweight dips using elbow and shoulder tracking.",
+        "func": dips
+    },
+    "Sit-Ups": {
+        "desc": "Track sit-up reps by measuring torso angle.",
+        "func": situps
+    },
+    "Plank": {
+        "desc": "Check plank posture alignment.",
+        "func": plank
+    },
+    "Squats": {
+        "desc": "Count squat reps using knee angle.",
+        "func": squats
+    }
+}
 
-def calculate_angle(a, b, c):
-    a = np.array(a)
-    b = np.array(b)
-    c = np.array(c)
+for name, val in exercises.items():
 
-    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - \
-              np.arctan2(a[1]-b[1], a[0]-b[0])
+    st.subheader(name)
 
-    angle = np.abs(radians * 180.0 / np.pi)
+    with st.expander("ℹ️ Description"):
+        st.write(val["desc"])
 
-    if angle > 180:
-        angle = 360 - angle
+    uploaded_file = st.file_uploader(
+        f"Upload video for {name}",
+        type=["mp4", "mov", "avi"],
+        key=f"{name}_upload"
+    )
 
-    return angle
+    if uploaded_file is not None:
 
-
-class PoseTrainer(VideoTransformerBase):
-
-    def __init__(self):
-        self.counter = 0
-        self.stage = None
-        self.pose = mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            min_detection_confidence=0.6,
-            min_tracking_confidence=0.6
+        actual_reps = st.number_input(
+            f"Enter Actual Reps for {name}",
+            min_value=1,
+            step=1,
+            key=f"{name}_actual"
         )
 
-    def transform(self, frame):
-        img = frame.to_ndarray(format="bgr24")
+        # Save uploaded file temporarily
+        tfile = tempfile.NamedTemporaryFile(delete=False)
+        tfile.write(uploaded_file.read())
 
-        image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(image)
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        if st.button(f"▶️ Process {name} Video"):
 
-        if results.pose_landmarks:
-            landmarks = results.pose_landmarks.landmark
+            with st.spinner("Processing video... Please wait."):
+                ai_reps = val["func"](tfile.name)
 
-            shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
-            elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
-            wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
+            accuracy = (
+                1 - abs(actual_reps - ai_reps)
+                / actual_reps
+            ) * 100
 
-            angle = calculate_angle(
-                [shoulder.x, shoulder.y],
-                [elbow.x, elbow.y],
-                [wrist.x, wrist.y]
-            )
+            st.success(f"🏆 AI Counted Reps: {ai_reps}")
+            st.success(f"✅ Accuracy: {accuracy:.2f}%")
 
-            if angle > 160:
-                self.stage = "down"
-
-            if angle < 90 and self.stage == "down":
-                self.stage = "up"
-                self.counter += 1
-
-            cv2.putText(image, f"REPS: {self.counter}",
-                        (20, 50),
-                        cv2.FONT_HERSHEY_SIMPLEX,
-                        1, (0, 255, 0), 2)
-
-            mp_drawing.draw_landmarks(
-                image,
-                results.pose_landmarks,
-                mp_pose.POSE_CONNECTIONS
-            )
-
-        return image
-
-
-rtc_configuration = RTCConfiguration(
-    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
-)
-
-webrtc_streamer(
-    key="ai-fitness",
-    video_processor_factory=PoseTrainer,
-    rtc_configuration=rtc_configuration
-)
+    st.markdown("---")
