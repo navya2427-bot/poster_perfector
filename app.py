@@ -1,94 +1,92 @@
 import streamlit as st
-from exercises import bicep_curls, dips, situps, plank, squats
-import tempfile
+import av
+import cv2
+import numpy as np
+from streamlit_webrtc import webrtc_streamer, VideoTransformerBase, RTCConfiguration
+import mediapipe as mp
 
 st.set_page_config(page_title="AI Fitness Trainer", layout="centered")
-st.title("🏋️ AI-Powered Fitness Trainer")
+st.title("🏋️ AI-Powered Fitness Trainer (Live Video)")
 
-st.markdown("Select an exercise to begin:")
+mp_pose = mp.solutions.pose
+mp_drawing = mp.solutions.drawing_utils
 
-exercises = {
-    "Bicep Curls": {
-        "desc": "Track your bicep curl reps using pose estimation.",
-        "func": bicep_curls
-    },
-    "Dips": {
-        "desc": "Bodyweight dips using elbow angle tracking.",
-        "func": dips
-    },
-    "Sit-Ups": {
-        "desc": "Track sit-up reps by measuring torso angle.",
-        "func": situps
-    },
-    "Plank": {
-        "desc": "Real-time plank posture checker.",
-        "func": plank
-    },
-    "Squats": {
-        "desc": "Count squat reps using knee and hip angles.",
-        "func": squats
-    }
-}
 
-for name, val in exercises.items():
+def calculate_angle(a, b, c):
+    a = np.array(a)
+    b = np.array(b)
+    c = np.array(c)
 
-    st.subheader(name)
+    radians = np.arctan2(c[1]-b[1], c[0]-b[0]) - \
+              np.arctan2(a[1]-b[1], a[0]-b[0])
 
-    with st.expander("ℹ️ Description"):
-        st.write(val["desc"])
+    angle = np.abs(radians * 180.0 / np.pi)
 
-    mode = st.radio(
-        f"Choose mode for {name}",
-        ["Camera (Quick)", "Upload Video"],
-        key=f"{name}_mode"
-    )
+    if angle > 180:
+        angle = 360 - angle
 
-    # ================= CAMERA MODE =================
-    if mode == "Camera (Quick)":
+    return angle
 
-        picture = st.camera_input(f"Take a picture for {name}")
 
-        if picture is not None:
-            st.image(picture)
+class PoseTrainer(VideoTransformerBase):
 
-            tfile = tempfile.NamedTemporaryFile(delete=False)
-            tfile.write(picture.getvalue())
-
-            ai_reps = val["func"](tfile.name, live=False)
-
-            st.success(f"Detected Reps (Single Frame): {ai_reps}")
-
-    # ================= UPLOAD MODE =================
-    else:
-
-        uploaded_file = st.file_uploader(
-            f"Upload video for {name}",
-            type=["mp4", "mov", "avi"],
-            key=f"{name}_upload"
+    def __init__(self):
+        self.counter = 0
+        self.stage = None
+        self.pose = mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=1,
+            min_detection_confidence=0.6,
+            min_tracking_confidence=0.6
         )
 
-        if uploaded_file is not None:
+    def transform(self, frame):
+        img = frame.to_ndarray(format="bgr24")
 
-            actual_reps_upload = st.number_input(
-                f"Enter Actual Reps for {name}",
-                min_value=1,
-                step=1,
-                key=f"{name}_upload_actual"
+        image = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        results = self.pose.process(image)
+        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+        if results.pose_landmarks:
+            landmarks = results.pose_landmarks.landmark
+
+            shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
+            elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
+            wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
+
+            angle = calculate_angle(
+                [shoulder.x, shoulder.y],
+                [elbow.x, elbow.y],
+                [wrist.x, wrist.y]
             )
 
-            tfile = tempfile.NamedTemporaryFile(delete=False)
-            tfile.write(uploaded_file.read())
+            if angle > 160:
+                self.stage = "down"
 
-            if st.button(f"▶️ Process {name} Video"):
+            if angle < 90 and self.stage == "down":
+                self.stage = "up"
+                self.counter += 1
 
-                ai_reps = val["func"](tfile.name, live=False)
+            cv2.putText(image, f"REPS: {self.counter}",
+                        (20, 50),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        1, (0, 255, 0), 2)
 
-                accuracy = (
-                    1 - abs(actual_reps_upload - ai_reps)
-                    / actual_reps_upload
-                ) * 100
+            mp_drawing.draw_landmarks(
+                image,
+                results.pose_landmarks,
+                mp_pose.POSE_CONNECTIONS
+            )
 
-                st.success(f"🏆 AI Reps: {ai_reps}")
-                st.success(f"🎯 Accuracy: {accuracy:.2f}%")
+        return image
 
-    st.markdown("---")
+
+rtc_configuration = RTCConfiguration(
+    {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+)
+
+webrtc_streamer(
+    key="ai-fitness",
+    video_processor_factory=PoseTrainer,
+    rtc_configuration=rtc_configuration
+)
