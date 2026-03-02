@@ -1,19 +1,21 @@
 import streamlit as st
 from exercises import bicep_curls, dips, situps, plank, squats
 import tempfile
+import os
 
 st.set_page_config(page_title="AI Fitness Trainer", layout="centered")
 st.title("🏋️ AI-Powered Fitness Trainer")
 
-st.markdown("Upload a video to analyze your exercise form and count reps.")
+# Detect if running on cloud
+IS_CLOUD = os.environ.get("STREAMLIT_SERVER_PORT") is not None
 
 exercises = {
     "Bicep Curls": {
-        "desc": "Track your bicep curl reps using elbow angle.",
+        "desc": "Track your bicep curl reps using pose estimation.",
         "func": bicep_curls
     },
     "Dips": {
-        "desc": "Bodyweight dips using elbow and shoulder tracking.",
+        "desc": "Bodyweight dips using elbow angle tracking.",
         "func": dips
     },
     "Sit-Ups": {
@@ -21,11 +23,11 @@ exercises = {
         "func": situps
     },
     "Plank": {
-        "desc": "Check plank posture alignment.",
+        "desc": "Real-time plank posture checker.",
         "func": plank
     },
     "Squats": {
-        "desc": "Count squat reps using knee angle.",
+        "desc": "Count squat reps using knee and hip angles.",
         "func": squats
     }
 }
@@ -37,36 +39,70 @@ for name, val in exercises.items():
     with st.expander("ℹ️ Description"):
         st.write(val["desc"])
 
-    uploaded_file = st.file_uploader(
-        f"Upload video for {name}",
-        type=["mp4", "mov", "avi"],
-        key=f"{name}_upload"
+    mode = st.radio(
+        f"Choose mode for {name}",
+        ["Live", "Upload Video"],
+        key=f"{name}_mode"
     )
 
-    if uploaded_file is not None:
+    # ================= LIVE MODE =================
+    if mode == "Live":
 
-        actual_reps = st.number_input(
-            f"Enter Actual Reps for {name}",
-            min_value=1,
-            step=1,
-            key=f"{name}_actual"
+        if IS_CLOUD:
+            st.warning("⚠️ Live mode is only available when running locally.")
+        else:
+            actual_reps_live = st.number_input(
+                f"Enter Actual Reps for {name}",
+                min_value=1,
+                step=1,
+                key=f"{name}_live_actual"
+            )
+
+            if st.button(f"▶️ Start {name} Live"):
+
+                st.info("Press 'q' in webcam window to quit.")
+
+                ai_reps = val["func"](0, live=True)
+
+                accuracy = (
+                    1 - abs(actual_reps_live - ai_reps)
+                    / actual_reps_live
+                ) * 100
+
+                st.success(f"🏆 AI Counted Reps: {ai_reps}")
+                st.success(f"✅ Accuracy: {accuracy:.2f}%")
+
+    # ================= UPLOAD MODE =================
+    else:
+
+        uploaded_file = st.file_uploader(
+            f"Upload video for {name}",
+            type=["mp4", "mov", "avi"],
+            key=f"{name}_upload"
         )
 
-        # Save uploaded file temporarily
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        tfile.write(uploaded_file.read())
+        if uploaded_file is not None:
 
-        if st.button(f"▶️ Process {name} Video"):
+            actual_reps_upload = st.number_input(
+                f"Enter Actual Reps for {name}",
+                min_value=1,
+                step=1,
+                key=f"{name}_upload_actual"
+            )
 
-            with st.spinner("Processing video... Please wait."):
-                ai_reps = val["func"](tfile.name)
+            tfile = tempfile.NamedTemporaryFile(delete=False)
+            tfile.write(uploaded_file.read())
 
-            accuracy = (
-                1 - abs(actual_reps - ai_reps)
-                / actual_reps
-            ) * 100
+            if st.button(f"▶️ Process {name} Video"):
 
-            st.success(f"🏆 AI Counted Reps: {ai_reps}")
-            st.success(f"✅ Accuracy: {accuracy:.2f}%")
+                ai_reps = val["func"](tfile.name, live=False)
+
+                accuracy = (
+                    1 - abs(actual_reps_upload - ai_reps)
+                    / actual_reps_upload
+                ) * 100
+
+                st.success(f"🏆 AI Counted Reps: {ai_reps}")
+                st.success(f"✅ Accuracy: {accuracy:.2f}%")
 
     st.markdown("---")
