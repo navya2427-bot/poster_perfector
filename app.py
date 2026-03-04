@@ -45,12 +45,13 @@ for name, val in exercises.items():
         key=f"{name}_mode"
     )
 
-    # ================= LIVE MODE =================
+    # ---------------- LIVE MODE ---------------- #
     if mode == "Live":
 
         if IS_CLOUD:
-            st.warning("⚠️ Live mode is only available when running locally.")
+            st.warning("⚠️ Live mode works only when running locally.")
         else:
+
             actual_reps_live = st.number_input(
                 f"Enter Actual Reps for {name}",
                 min_value=1,
@@ -72,7 +73,7 @@ for name, val in exercises.items():
                 st.success(f"🏆 AI Counted Reps: {ai_reps}")
                 st.success(f"✅ Accuracy: {accuracy:.2f}%")
 
-    # ================= UPLOAD MODE =================
+    # ---------------- UPLOAD MODE ---------------- #
     else:
 
         uploaded_file = st.file_uploader(
@@ -95,7 +96,9 @@ for name, val in exercises.items():
 
             if st.button(f"▶️ Process {name} Video"):
 
-                ai_reps = val["func"](tfile.name, live=False)
+                with st.spinner("Analyzing exercise..."):
+
+                    ai_reps = val["func"](tfile.name, live=False)
 
                 accuracy = (
                     1 - abs(actual_reps_upload - ai_reps)
