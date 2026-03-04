@@ -8,7 +8,7 @@ mp_drawing = mp.solutions.drawing_utils
 mp_pose = mp.solutions.pose
 
 
-# ------------------ Load Pose Model (Cached) ------------------ #
+# -------- Load Pose Model -------- #
 @st.cache_resource
 def load_pose():
     return mp_pose.Pose(
@@ -20,8 +20,9 @@ def load_pose():
     )
 
 
-# ------------------ Angle Calculator ------------------ #
+# -------- Angle Calculator -------- #
 def calculate_angle(a, b, c):
+
     a = np.array(a)
     b = np.array(b)
     c = np.array(c)
@@ -37,7 +38,7 @@ def calculate_angle(a, b, c):
     return angle
 
 
-# ------------------ Main Processing Engine ------------------ #
+# -------- Core Processing -------- #
 def process_exercise(source, exercise_type):
 
     counter = 0
@@ -56,6 +57,7 @@ def process_exercise(source, exercise_type):
     SMOOTH_WINDOW = 4
 
     while True:
+
         ret, frame = cap.read()
         if not ret:
             break
@@ -68,8 +70,9 @@ def process_exercise(source, exercise_type):
 
             landmarks = results.pose_landmarks.landmark
 
-            # ---------------- BICEP ---------------- #
+            # -------- BICEP -------- #
             if exercise_type == "bicep":
+
                 shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
                 elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
                 wrist = landmarks[mp_pose.PoseLandmark.LEFT_WRIST.value]
@@ -80,8 +83,9 @@ def process_exercise(source, exercise_type):
                     [wrist.x, wrist.y]
                 )
 
-            # ---------------- SQUAT ---------------- #
+            # -------- SQUAT -------- #
             elif exercise_type == "squat":
+
                 hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
                 knee = landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value]
                 ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
@@ -92,8 +96,9 @@ def process_exercise(source, exercise_type):
                     [ankle.x, ankle.y]
                 )
 
-            # ---------------- SITUP ---------------- #
+            # -------- SITUP -------- #
             elif exercise_type == "situp":
+
                 shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
                 hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
                 knee = landmarks[mp_pose.PoseLandmark.LEFT_KNEE.value]
@@ -104,8 +109,9 @@ def process_exercise(source, exercise_type):
                     [knee.x, knee.y]
                 )
 
-            # ---------------- DIPS ---------------- #
+            # -------- DIPS -------- #
             elif exercise_type == "dips":
+
                 shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
                 elbow = landmarks[mp_pose.PoseLandmark.LEFT_ELBOW.value]
                 hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
@@ -116,8 +122,9 @@ def process_exercise(source, exercise_type):
                     [hip.x, hip.y]
                 )
 
-            # ---------------- PLANK ---------------- #
+            # -------- PLANK -------- #
             elif exercise_type == "plank":
+
                 shoulder = landmarks[mp_pose.PoseLandmark.LEFT_SHOULDER.value]
                 hip = landmarks[mp_pose.PoseLandmark.LEFT_HIP.value]
                 ankle = landmarks[mp_pose.PoseLandmark.LEFT_ANKLE.value]
@@ -139,15 +146,16 @@ def process_exercise(source, exercise_type):
                                 cv2.FONT_HERSHEY_SIMPLEX,
                                 1, (0, 0, 255), 2)
 
-            # --------- Angle Smoothing --------- #
+            # -------- Angle Smoothing -------- #
             angle_history.append(angle)
             if len(angle_history) > SMOOTH_WINDOW:
                 angle_history.pop(0)
 
             angle = np.mean(angle_history)
 
-            # --------- Rep Counting Logic --------- #
+            # -------- Rep Counting -------- #
             if exercise_type != "plank":
+
                 if angle > 160:
                     stage = "down"
 
@@ -167,30 +175,32 @@ def process_exercise(source, exercise_type):
             )
 
         frame_placeholder.image(image, channels="BGR")
-        time.sleep(0.02)
+
+        time.sleep(0.01)
 
     cap.release()
+
     st.success(f"🏆 Total Reps: {counter}")
 
     return counter
 
 
-# ------------------ Exercise Wrappers ------------------ #
-def bicep_curls(source):
+# -------- Wrappers -------- #
+def bicep_curls(source, live=False):
     return process_exercise(source, "bicep")
 
 
-def squats(source):
+def squats(source, live=False):
     return process_exercise(source, "squat")
 
 
-def situps(source):
+def situps(source, live=False):
     return process_exercise(source, "situp")
 
 
-def dips(source):
+def dips(source, live=False):
     return process_exercise(source, "dips")
 
 
-def plank(source):
+def plank(source, live=False):
     return process_exercise(source, "plank")
